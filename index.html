@@ -55,6 +55,8 @@ main{padding:10px 10px calc(84px + env(safe-area-inset-bottom));max-width:720px;
 .spacer{height:10px}
 .addline{display:block;width:100%;text-align:center;color:var(--muted);background:none;
   border:1px dashed #c9cfd6;border-radius:10px;padding:9px;font-size:14px;margin:10px 0}
+.delday{display:block;margin:26px auto 0;background:none;border:none;
+  color:#c0636a;font-size:13px;padding:8px 12px;text-decoration:underline}
 .empty{color:var(--muted);text-align:center;padding:40px 20px}
 /* 儲存狀態 */
 .savebar{position:fixed;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:30;
@@ -70,9 +72,11 @@ main{padding:10px 10px calc(84px + env(safe-area-inset-bottom));max-width:720px;
   transform:translateY(105%);transition:transform .22s ease;max-height:86vh;overflow-y:auto}
 .sheet.show{transform:none}
 .sheet h3{margin:0 0 10px;font-size:15px;color:var(--navy)}
-.sheet textarea{width:100%;min-height:96px;font:inherit;border:1.5px solid var(--line);
-  border-radius:10px;padding:10px;resize:vertical;background:#fafbfc}
-.sheet textarea:focus{outline:none;border-color:var(--navy)}
+.richbox{width:100%;min-height:96px;max-height:40vh;overflow-y:auto;font:inherit;
+  border:1.5px solid var(--line);border-radius:10px;padding:10px;background:#fafbfc;
+  white-space:pre-wrap;word-break:break-word;-webkit-user-select:text;user-select:text}
+.richbox:focus{outline:none;border-color:var(--navy)}
+.richbox:empty::before{content:"輸入內容…";color:var(--muted)}
 .tokrow{display:flex;gap:6px;margin:10px 0;flex-wrap:wrap}
 .tok{border:1px solid var(--line);background:#f2f4f6;border-radius:8px;
   padding:7px 10px;font-size:13px;font-weight:600}
@@ -150,13 +154,14 @@ main{padding:10px 10px calc(84px + env(safe-area-inset-bottom));max-width:720px;
 <div class="sheet-mask" id="mask"></div>
 <div class="sheet" id="editor">
   <h3 id="edTitle">編輯</h3>
-  <textarea id="edText" rows="4" placeholder="輸入內容…"></textarea>
+  <div id="edRich" class="richbox" contenteditable="true"></div>
   <div class="tokrow">
-    <button class="tok strike" data-tok="~~">刪除線</button>
-    <button class="tok red" data-tok="==">紅字</button>
-    <button class="tok green" data-tok="++">綠字</button>
-    <button class="tok" data-tok="**">粗體</button>
-    <button class="tok green" id="tokArrow">=&gt;綠色進度</button>
+    <button class="tok red" data-cmd="red">紅字</button>
+    <button class="tok green" data-cmd="green">綠字</button>
+    <button class="tok" data-cmd="black">黑字</button>
+    <button class="tok" data-cmd="bold"><b>粗體</b></button>
+    <button class="tok strike" data-cmd="strike">刪除線</button>
+    <button class="tok green" data-cmd="arrow">=&gt;進度</button>
   </div>
   <div class="lvlrow">
     層級：<button id="lvlDown">◀</button>
@@ -169,8 +174,8 @@ main{padding:10px 10px calc(84px + env(safe-area-inset-bottom));max-width:720px;
     <button class="btn-next" id="edNext">存＋下一</button>
     <button class="btn-save" id="edSave">儲存</button>
   </div>
-  <div class="hint">標記語法：<b>~~刪除線~~</b>、<b>==紅字==</b>、<b>++綠字++</b>、<b>**粗體**</b>。
-  慣例：完成打勾（整行刪除線）、紅字＝重要待辦、綠字＝進度更新（=&gt;後面接進度）。</div>
+  <div class="hint">跟 Excel 一樣：<b>先選取文字</b>，再點上面的顏色／粗體／刪除線。
+  慣例：完成打勾（整行刪除線）、紅字＝重要待辦、綠字＝進度（「=&gt;進度」會在游標處插入綠色箭頭）。</div>
 </div>
 
 <div class="fulltext" id="fulltext">
@@ -544,6 +549,30 @@ function renderList(){
   add.className="addline"; add.textContent="＋ 新增事項";
   add.onclick = ()=>openEditor(-1);
   el.appendChild(add);
+  if(state.date){
+    const del = document.createElement("button");
+    del.className = "delday";
+    const f = fmtTab(state.date);
+    del.textContent = "🗑 刪除這一天（" + f.label + "）";
+    del.onclick = deleteCurrentDay;
+    el.appendChild(del);
+  }
+}
+async function deleteCurrentDay(){
+  if(state.days.length <= 1){ toast("至少要保留一天"); return; }
+  const f = fmtTab(state.date);
+  if(!confirm("確定要刪除 " + f.label + "（" + f.wd + "）整天的追蹤表？\n" +
+              "（刪除前會自動備份，也可從 Drive 版本紀錄還原）")) return;
+  try{
+    await fetchJSON("/api/deleteday", {method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({date: state.date})});
+    toast("已刪除 " + f.label);
+    state.dirty = false; state.date = null;
+    await loadState();
+    const next = state.days.includes(state.today) ? state.today : state.days[0];
+    await loadDay(next);
+  }catch(e){ toast("刪除失敗：" + e.message); }
 }
 
 /* ---------------- mutations ---------------- */
@@ -575,25 +604,117 @@ function cycleColor(idx){
 }
 
 /* ---------------- editor sheet ---------------- */
+/* ---- Excel 式所見即所得編輯：spans ↔ contenteditable HTML ---- */
+const RICH_RED = "#d92b2b", RICH_GREEN = "#1d8a4a", RICH_BLACK = "#1c2430";
+function spansToRichHTML(spans){
+  return (spans||[]).map(s=>{
+    const st = [];
+    if(s.color) st.push("color:" + (IMG_COLOR[s.color] || "#"+s.color.slice(2)));
+    if(s.bold) st.push("font-weight:700");
+    if(s.strike) st.push("text-decoration:line-through");
+    const esc = (s.t||"").replace(/&/g,"&amp;").replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;").replace(/\n/g,"<br>");
+    return st.length ? '<span style="'+st.join(";")+'">'+esc+'</span>' : esc;
+  }).join("");
+}
+function colorToXlsx(c){
+  if(!c) return null;
+  let hex = null;
+  const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(c);
+  if(m) hex = [1,2,3].map(i=>(+m[i]).toString(16).padStart(2,"0")).join("");
+  else if(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c)){
+    hex = c.slice(1);
+    if(hex.length===3) hex = hex.split("").map(x=>x+x).join("");
+  }
+  if(!hex) return null;
+  hex = hex.toUpperCase();
+  if(hex==="D92B2B"||hex==="FF0000") return "FFFF0000";
+  if(hex==="1D8A4A"||hex==="00B050") return "FF00B050";
+  if(hex==="1C2430"||hex==="000000"||hex==="222222") return null;
+  return "FF"+hex;
+}
+function richToSpans(root){
+  const spans = [];
+  const push = (t, st)=>{
+    if(!t) return;
+    const s = {t};
+    if(st.bold) s.bold = true;
+    if(st.strike) s.strike = true;
+    if(st.color) s.color = st.color;
+    spans.push(s);
+  };
+  (function walk(node, st){
+    for(const ch of node.childNodes){
+      if(ch.nodeType===3){ push(ch.nodeValue.replace(/\u00a0/g," "), st); continue; }
+      if(ch.nodeType!==1) continue;
+      const tag = ch.tagName;
+      if(tag==="BR"){ push("\n", st); continue; }
+      const ns = Object.assign({}, st);
+      if(tag==="B"||tag==="STRONG") ns.bold = true;
+      if(tag==="S"||tag==="STRIKE"||tag==="DEL") ns.strike = true;
+      if(tag==="FONT" && ch.getAttribute("color")){
+        const c = colorToXlsx(ch.getAttribute("color"));
+        if(c) ns.color = c; else delete ns.color;
+      }
+      const style = ch.style;
+      if(style && style.color){
+        const c = colorToXlsx(style.color);
+        if(c) ns.color = c; else delete ns.color;
+      }
+      if(style && style.fontWeight){
+        const fw = style.fontWeight;
+        if(fw==="bold" || +fw>=600) ns.bold = true;
+        else delete ns.bold;
+      }
+      if(style){
+        const td = (style.textDecorationLine || style.textDecoration || "");
+        if(/line-through/.test(td)) ns.strike = true;
+        else if(/none/.test(td)) delete ns.strike;
+      }
+      if(/^(DIV|P)$/.test(tag) && spans.length) push("\n", {});
+      walk(ch, ns);
+    }
+  })(root, {});
+  while(spans.length && /^[\n\s]*$/.test(spans[spans.length-1].t)) spans.pop();
+  return spans;
+}
+function applyCmd(cmd){
+  const rich = $("edRich");
+  rich.focus();
+  try{ document.execCommand("styleWithCSS", false, true); }catch(e){}
+  if(cmd==="bold") document.execCommand("bold");
+  else if(cmd==="strike") document.execCommand("strikeThrough");
+  else if(cmd==="red") document.execCommand("foreColor", false, RICH_RED);
+  else if(cmd==="green") document.execCommand("foreColor", false, RICH_GREEN);
+  else if(cmd==="black") document.execCommand("foreColor", false, RICH_BLACK);
+  else if(cmd==="arrow") document.execCommand(
+    "insertHTML", false, '<span style="color:'+RICH_GREEN+'">=&gt;</span>');
+}
+document.querySelectorAll(".tok[data-cmd]").forEach(b=>{
+  // pointerdown preventDefault：點按鈕時不讓 contenteditable 失焦、選取消失
+  b.addEventListener("pointerdown", e=>e.preventDefault());
+  b.onclick = ()=>applyCmd(b.dataset.cmd);
+});
+
 let edCtx = null; // {mode:'edit', line, level} | {mode:'new', idx, level}
 function openEditor(idx, presetLevel){
   if(idx>=0){
     const l = state.lines[idx];
     // 存物件參照而非索引：背景 409 重載後 indexOf 會失效而非指錯列
     edCtx = {mode:"edit", line:l, level:l.level};
-    $("edText").value = spansToMarkup(l.spans);
+    $("edRich").innerHTML = spansToRichHTML(l.spans);
     $("edTitle").textContent = "編輯" + (l.level===0?"分類":"事項");
     $("edDel").style.display = "";
   }else{
     const lvl = presetLevel!==undefined ? presetLevel : 1;
     edCtx = {mode:"new", idx: state.lines.length, level:lvl};
-    $("edText").value = "";
+    $("edRich").innerHTML = "";
     $("edTitle").textContent = "新增";
     $("edDel").style.display = "none";
   }
   updateLvlName();
   $("mask").classList.add("show"); $("editor").classList.add("show");
-  setTimeout(()=>$("edText").focus(), 250);
+  setTimeout(()=>$("edRich").focus(), 250);
 }
 function closeEditor(){
   $("mask").classList.remove("show"); $("editor").classList.remove("show");
@@ -604,27 +725,10 @@ function updateLvlName(){
 }
 $("lvlDown").onclick = ()=>{ if(edCtx.level>0){ edCtx.level--; updateLvlName(); } };
 $("lvlUp").onclick = ()=>{ if(edCtx.level<5){ edCtx.level++; updateLvlName(); } };
-function wrapSelection(tok){
-  const ta = $("edText");
-  const a = ta.selectionStart, b = ta.selectionEnd, v = ta.value;
-  if(a===b){ ta.setRangeText(tok+tok, a, b, "end"); ta.selectionStart=ta.selectionEnd=a+tok.length; }
-  else ta.setRangeText(tok + v.slice(a,b) + tok, a, b, "select");
-  ta.focus();
-}
-document.querySelectorAll(".tok[data-tok]").forEach(b=>{
-  b.onclick = ()=>wrapSelection(b.dataset.tok);
-});
-$("tokArrow").onclick = ()=>{
-  const ta = $("edText");
-  const pos = ta.value.length;
-  ta.setRangeText("++=>++", pos, pos, "end");
-  ta.selectionStart = ta.selectionEnd = pos+4; // 游標放在 => 後、++ 前
-  ta.focus();
-};
 function commitEditor(){
-  // 回傳 {ok, next}：next = 「存＋下一」該插入的位置；失敗回 {ok:false}
-  const raw = $("edText").value;
-  const text = raw.trim();
+  // 回傳 {ok, next, empty}：next = 「存＋下一」該插入的位置
+  const newSpans = richToSpans($("edRich"));
+  const text = spansText(newSpans).trim();
   if(edCtx.mode==="edit"){
     const l = edCtx.line;
     const i = state.lines.indexOf(l);
@@ -638,8 +742,8 @@ function commitEditor(){
       return {ok:true, next:i};
     }
     let changed = false;
-    if(raw !== spansToMarkup(l.spans)){
-      l.spans = markupToSpans(raw); l.mod = true; changed = true;
+    if(spansToMarkup(newSpans) !== spansToMarkup(l.spans)){
+      l.spans = newSpans; l.mod = true; changed = true;
     }
     if(l.level !== edCtx.level){
       l.level = edCtx.level; l.group = "n"+(++state.newSeq);
@@ -648,15 +752,15 @@ function commitEditor(){
     if(changed){ markDirty(); renderList(); }
     return {ok:true, next:i+1};
   }
-  if(!text) return {ok:false};
+  if(!text) return {ok:false, empty:true};
   const at = Math.min(edCtx.idx, state.lines.length);
   state.lines.splice(at, 0, {
-    level: edCtx.level, spans: markupToSpans(raw),
+    level: edCtx.level, spans: newSpans,
     group: "n"+(++state.newSeq), orig: null, ht: null, mod: true});
   markDirty(); renderList();
   return {ok:true, next:at+1};
 }
-$("edSave").onclick = ()=>{ if(commitEditor().ok || !$("edText").value.trim()) closeEditor(); };
+$("edSave").onclick = ()=>{ const r = commitEditor(); if(r.ok || r.empty) closeEditor(); };
 $("edCancel").onclick = closeEditor;
 $("edDel").onclick = ()=>{
   if(edCtx.mode==="edit"){
@@ -670,8 +774,8 @@ $("edNext").onclick = ()=>{
   const r = commitEditor();
   if(!r.ok) return;
   edCtx = {mode:"new", idx: r.next, level: lvl};
-  $("edText").value=""; $("edTitle").textContent="新增"; $("edDel").style.display="none";
-  updateLvlName(); $("edText").focus();
+  $("edRich").innerHTML=""; $("edTitle").textContent="新增"; $("edDel").style.display="none";
+  updateLvlName(); $("edRich").focus();
 };
 $("mask").onclick = closeEditor;
 
