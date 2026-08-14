@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#1E3A5F">
+<title>每日追蹤事項</title>
+<style>
+:root{
+  --navy:#1E3A5F; --bg:#f5f6f8; --card:#ffffff; --line:#e3e6ea;
+  --text:#1c2430; --muted:#8a93a0;
+  --red:#d92b2b; --green:#1d8a4a; --amber:#c77700;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,"PingFang TC","Heiti TC","Microsoft JhengHei",sans-serif;
+  font-size:16px; line-height:1.45; overscroll-behavior-y:contain}
+header{position:sticky;top:0;z-index:20;background:var(--navy);color:#fff;
+  padding-top:env(safe-area-inset-top)}
+.titlebar{display:flex;align-items:center;gap:8px;padding:10px 12px 6px}
+.titlebar h1{font-size:17px;margin:0;flex:1;font-weight:700;letter-spacing:.5px}
+.titlebar button{background:rgba(255,255,255,.16);color:#fff;border:none;
+  border-radius:8px;padding:7px 11px;font-size:14px;font-weight:600}
+.titlebar button:active{background:rgba(255,255,255,.3)}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding:6px 12px 10px;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:0 0 auto;background:rgba(255,255,255,.12);color:#dbe4ee;border:none;
+  border-radius:16px;padding:6px 13px;font-size:14px;font-weight:600;white-space:nowrap}
+.tab.active{background:#fff;color:var(--navy)}
+.tab .wd{font-size:11px;opacity:.75;margin-left:3px}
+main{padding:10px 10px calc(84px + env(safe-area-inset-bottom));max-width:720px;margin:0 auto}
+.cat{display:flex;align-items:center;gap:8px;margin:16px 2px 6px;padding:0}
+.cat:first-child{margin-top:6px}
+.cat .bar{width:4px;height:18px;border-radius:2px;background:var(--navy)}
+.cat .cat-text{font-size:15px;font-weight:800;color:var(--navy);flex:1;padding:4px 0}
+.item{display:flex;align-items:flex-start;gap:10px;background:var(--card);
+  border:1px solid var(--line);border-radius:12px;padding:10px 10px 10px 12px;margin:6px 0}
+.item.done{opacity:.55}
+.item .chk{flex:0 0 auto;width:26px;height:26px;border-radius:50%;
+  border:2px solid #b8c0ca;background:#fff;margin-top:1px;position:relative}
+.item.done .chk{border-color:var(--green);background:var(--green)}
+.item.done .chk::after{content:"✓";position:absolute;inset:0;color:#fff;
+  font-size:16px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.item .txt{flex:1;min-width:0;word-break:break-word;white-space:pre-wrap;padding-top:2px}
+.item.done .txt{text-decoration:line-through;color:var(--muted)}
+.item .dot{flex:0 0 auto;width:22px;height:22px;border-radius:50%;
+  border:2px solid var(--line);background:#fff;margin-top:3px}
+.item .dot.red{background:var(--red);border-color:var(--red)}
+.item .dot.green{background:var(--green);border-color:var(--green)}
+.item .dot.mixed{background:linear-gradient(135deg,var(--red) 50%,var(--green) 50%);border-color:#fff}
+.sub1{margin-left:22px}.sub2{margin-left:44px}.sub3{margin-left:60px}
+.spacer{height:10px}
+.addline{display:block;width:100%;text-align:center;color:var(--muted);background:none;
+  border:1px dashed #c9cfd6;border-radius:10px;padding:9px;font-size:14px;margin:10px 0}
+.empty{color:var(--muted);text-align:center;padding:40px 20px}
+/* 儲存狀態 */
+.savebar{position:fixed;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:30;
+  background:#2b3442;color:#fff;border-radius:18px;padding:8px 14px;font-size:13px;
+  box-shadow:0 4px 14px rgba(0,0,0,.25);transition:opacity .3s}
+.savebar.ok{background:var(--green)} .savebar.err{background:var(--red)}
+.savebar.hide{opacity:0;pointer-events:none}
+/* 底部編輯抽屜 */
+.sheet-mask{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:40;display:none}
+.sheet-mask.show{display:block}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:50;background:#fff;
+  border-radius:16px 16px 0 0;padding:14px 14px calc(14px + env(safe-area-inset-bottom));
+  transform:translateY(105%);transition:transform .22s ease;max-height:86vh;overflow-y:auto}
+.sheet.show{transform:none}
+.sheet h3{margin:0 0 10px;font-size:15px;color:var(--navy)}
+.sheet textarea{width:100%;min-height:96px;font:inherit;border:1.5px solid var(--line);
+  border-radius:10px;padding:10px;resize:vertical;background:#fafbfc}
+.sheet textarea:focus{outline:none;border-color:var(--navy)}
+.tokrow{display:flex;gap:6px;margin:10px 0;flex-wrap:wrap}
+.tok{border:1px solid var(--line);background:#f2f4f6;border-radius:8px;
+  padding:7px 10px;font-size:13px;font-weight:600}
+.tok.red{color:var(--red)} .tok.green{color:var(--green)}
+.tok.strike{text-decoration:line-through}
+.lvlrow{display:flex;align-items:center;gap:10px;margin:6px 0 12px;font-size:14px}
+.lvlrow button{width:38px;height:34px;border:1px solid var(--line);background:#fff;
+  border-radius:8px;font-size:16px}
+.lvlname{font-weight:700;color:var(--navy)}
+.actrow{display:flex;gap:8px}
+.actrow button{flex:1;padding:12px;border:none;border-radius:10px;font-size:15px;font-weight:700}
+.btn-save{background:var(--navy);color:#fff}
+.btn-cancel{background:#eef0f3;color:var(--text)}
+.btn-del{background:#fdecec;color:var(--red);flex:0 0 auto;padding:12px 14px}
+.btn-next{background:#e8f0e9;color:var(--green)}
+.hint{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.6}
+/* 全文模式 */
+.fulltext{position:fixed;inset:0;z-index:60;background:#fff;display:none;flex-direction:column}
+.fulltext.show{display:flex}
+.fulltext .fhead{display:flex;align-items:center;gap:8px;background:var(--navy);color:#fff;
+  padding:calc(10px + env(safe-area-inset-top)) 12px 10px}
+.fulltext .fhead b{flex:1;font-size:15px}
+.fulltext .fhead button{background:rgba(255,255,255,.16);color:#fff;border:none;
+  border-radius:8px;padding:8px 14px;font-size:14px;font-weight:700}
+.fulltext textarea{flex:1;border:none;padding:12px;font:14px/1.7 ui-monospace,Menlo,
+  "PingFang TC",monospace;resize:none;white-space:pre;overflow:auto}
+.fulltext textarea:focus{outline:none}
+.fulltext .fhint{padding:8px 12px calc(8px + env(safe-area-inset-bottom));font-size:12px;
+  color:var(--muted);border-top:1px solid var(--line)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(70px + env(safe-area-inset-bottom));z-index:70;background:#2b3442;color:#fff;
+  padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .3s;
+  max-width:86vw;text-align:center}
+.toast.show{opacity:1}
+/* 存取碼閘門 */
+.gate{position:fixed;inset:0;z-index:90;background:var(--navy);display:none;
+  align-items:center;justify-content:center;padding:20px}
+.gate.show{display:flex}
+.gate-card{background:#fff;border-radius:16px;padding:28px 24px;width:100%;max-width:340px;
+  text-align:center}
+.gate-card h2{margin:0 0 4px;color:var(--navy);font-size:20px}
+.gate-card p{margin:0 0 16px;color:var(--muted);font-size:14px}
+.gate-card input{width:100%;font-size:20px;text-align:center;letter-spacing:4px;
+  border:1.5px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+.gate-card input:focus{outline:none;border-color:var(--navy)}
+.gate-card button{width:100%;background:var(--navy);color:#fff;border:none;
+  border-radius:10px;padding:13px;font-size:16px;font-weight:700}
+.gate-err{color:var(--red);font-size:13px;margin-top:10px;min-height:18px}
+/* 圖片分享 overlay */
+.imgshare{position:fixed;inset:0;z-index:80;background:rgba(20,26,34,.96);display:none;
+  flex-direction:column}
+.imgshare.show{display:flex}
+.imgshare-head{display:flex;align-items:center;gap:10px;color:#fff;
+  padding:calc(12px + env(safe-area-inset-top)) 14px 12px;font-size:14px}
+.imgshare-head b{flex:1}
+.imgshare-head button{background:rgba(255,255,255,.16);color:#fff;border:none;
+  border-radius:8px;padding:8px 14px;font-size:14px;font-weight:700}
+.imgshare-body{flex:1;overflow:auto;padding:0 14px calc(14px + env(safe-area-inset-bottom))}
+.imgshare-body img{width:100%;border-radius:10px}
+</style>
+</head>
+<body>
+<header>
+  <div class="titlebar">
+    <h1>每日追蹤事項</h1>
+    <button id="btnShare" aria-label="分享圖片">📷</button>
+    <button id="btnText">✎ 全文</button>
+    <button id="btnToday">＋ 今天</button>
+  </div>
+  <div class="tabs" id="tabs"></div>
+</header>
+<main id="list"><div class="empty">載入中…</div></main>
+<div class="savebar hide" id="savebar">已儲存</div>
+
+<div class="sheet-mask" id="mask"></div>
+<div class="sheet" id="editor">
+  <h3 id="edTitle">編輯</h3>
+  <textarea id="edText" rows="4" placeholder="輸入內容…"></textarea>
+  <div class="tokrow">
+    <button class="tok strike" data-tok="~~">刪除線</button>
+    <button class="tok red" data-tok="==">紅字</button>
+    <button class="tok green" data-tok="++">綠字</button>
+    <button class="tok" data-tok="**">粗體</button>
+    <button class="tok green" id="tokArrow">=&gt;綠色進度</button>
+  </div>
+  <div class="lvlrow">
+    層級：<button id="lvlDown">◀</button>
+    <span class="lvlname" id="lvlName">事項</span>
+    <button id="lvlUp">▶</button>
+  </div>
+  <div class="actrow">
+    <button class="btn-del" id="edDel">刪除</button>
+    <button class="btn-cancel" id="edCancel">取消</button>
+    <button class="btn-next" id="edNext">存＋下一</button>
+    <button class="btn-save" id="edSave">儲存</button>
+  </div>
+  <div class="hint">標記語法：<b>~~刪除線~~</b>、<b>==紅字==</b>、<b>++綠字++</b>、<b>**粗體**</b>。
+  慣例：完成打勾（整行刪除線）、紅字＝重要待辦、綠字＝進度更新（=&gt;後面接進度）。</div>
+</div>
+
+<div class="fulltext" id="fulltext">
+  <div class="fhead">
+    <b id="ftTitle">全文編輯</b>
+    <button id="ftCancel">取消</button>
+    <button id="ftSave">儲存</button>
+  </div>
+  <textarea id="ftText" spellcheck="false"></textarea>
+  <div class="fhint"># 開頭＝分類；一般行＝事項；行首每 2 個空格縮一層；空行＝空白列。
+  標記：~~刪除線~~ ==紅字== ++綠字++ **粗體**</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<div class="gate" id="gate">
+  <div class="gate-card">
+    <h2>每日追蹤事項</h2>
+    <p>請輸入管委會存取碼</p>
+    <input type="password" id="gateInput" inputmode="numeric" autocomplete="off">
+    <button id="gateBtn">進入</button>
+    <div class="gate-err" id="gateErr"></div>
+  </div>
+</div>
+
+<div class="imgshare" id="imgshare">
+  <div class="imgshare-head">
+    <b>長按圖片可分享到 LINE 或儲存</b>
+    <button id="imgClose">關閉</button>
+  </div>
+  <div class="imgshare-body"><img id="imgOut" alt="當日追蹤事項"></div>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+// 存取碼：記在 localStorage（首次由閘門輸入或 ?t= 連結帶入），一律走 header。
+// ?t= 優先於舊的 localStorage（換碼後發的新連結才會生效），入口後立刻從網址移除
+const urlTok = new URLSearchParams(location.search).get("t");
+let TOKEN = urlTok || localStorage.getItem("todo_token") || "";
+if(urlTok){
+  localStorage.setItem("todo_token", urlTok);
+  history.replaceState(null, "", location.pathname);
+}
+// 頁面掛在 GitHub Pages 時，API 走 Cloud Run；由 Cloud Run 直接開則同源
+const API_BASE = /\.github\.io$/.test(location.hostname)
+  ? "https://daily-todo-478667358161.asia-east1.run.app" : "";
+const api = p => API_BASE + p;
+const authHeaders = () => TOKEN ? {"X-Todo-Token": TOKEN} : {};
+
+const COLOR_TOK = {"FFFF0000":"==","FF00B050":"++"};
+const DISPLAY_COLOR = {"FFFF0000":"var(--red)","FF00B050":"var(--green)"};
+const LEVEL_NAMES = ["分類","事項","子項","子項3","子項4","子項5"];
+
+let state = {
+  days: [], today: "", date: null,
+  lines: [], etag: null,
+  dirty: false, saving: false, gen: 0, newSeq: 0,
+};
+let saveTimer = null;
+
+/* ---------------- utils ---------------- */
+function toast(msg, ms=2600){
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._h); t._h = setTimeout(()=>t.classList.remove("show"), ms);
+}
+function spansText(spans){ return (spans||[]).map(s=>s.t||"").join(""); }
+function isDone(l){ return l.spans.length>0 && l.spans.every(s=>s.strike); }
+function colorState(l){
+  if(!l.spans.length) return "none";
+  if(l.spans.every(s=>s.color==="FFFF0000")) return "red";
+  if(l.spans.every(s=>s.color==="FF00B050")) return "green";
+  if(l.spans.some(s=>s.color)) return "mixed";
+  return "none";
+}
+function fmtTab(d){
+  const mm = d.slice(4,6), dd = d.slice(6,8);
+  const dt = new Date(+d.slice(0,4), +mm-1, +dd);
+  const wd = "日一二三四五六"[dt.getDay()];
+  return {label: mm+"/"+dd, wd: wd};
+}
+
+/* -------- markup <-> spans -------- */
+// 原文裡的字面 **/~~/==/++/{{#/}} 必須跳脫，否則「C++ 專案」這種字
+// 開編輯器按儲存就會被當標記吃掉（review 實測過的毀損路徑）
+const TOKEN_ESC_RE = /(\*\*|~~|==|\+\+|\{\{#|\}\})/g;
+function escapeMarkup(t){
+  return t.replace(/\\/g,"\\\\").replace(TOKEN_ESC_RE, "\\$1");
+}
+function spansToMarkup(spans){
+  // 相鄰同樣式先合併，輸出乾淨標記
+  const merged = [];
+  for(const s of spans||[]){
+    const prev = merged[merged.length-1];
+    if(prev && !!prev.bold===!!s.bold && !!prev.strike===!!s.strike &&
+       (prev.color||"")===(s.color||"")) prev.t += s.t;
+    else merged.push({t:s.t, bold:s.bold, strike:s.strike, color:s.color});
+  }
+  let out = "";
+  for(const s of merged){
+    let open="", close="";
+    if(s.bold){ open+="**"; close="**"+close; }
+    if(s.strike){ open+="~~"; close="~~"+close; }
+    if(s.color){
+      const tok = COLOR_TOK[s.color];
+      if(tok){ open+=tok; close=tok+close; }
+      else { open+="{{#"+s.color+"|"; close="}}"+close; }
+    }
+    out += open + escapeMarkup(s.t) + close;
+  }
+  return out;
+}
+function markupToSpans(text){
+  const spans=[]; let cur="";
+  let bold=false, strike=false, color=null; const colorStack=[];
+  const flush=()=>{ if(cur){ const s={t:cur};
+    if(bold)s.bold=true; if(strike)s.strike=true; if(color)s.color=color;
+    spans.push(s); cur=""; } };
+  let i=0;
+  while(i<text.length){
+    if(text[i]==="\\"){
+      const rest = text.slice(i+1);
+      if(rest.startsWith("\\")){ cur+="\\"; i+=2; continue; }
+      const tm = /^(\*\*|~~|==|\+\+|\{\{#|\}\})/.exec(rest);
+      if(tm){ cur+=tm[1]; i+=1+tm[1].length; continue; }
+      cur+="\\"; i++; continue;
+    }
+    const two=text.substr(i,2);
+    if(two==="**"){ flush(); bold=!bold; i+=2; continue; }
+    if(two==="~~"){ flush(); strike=!strike; i+=2; continue; }
+    if(two==="=="){ flush(); color = color==="FFFF0000"?null:"FFFF0000"; i+=2; continue; }
+    if(two==="++"){ flush(); color = color==="FF00B050"?null:"FF00B050"; i+=2; continue; }
+    if(two==="}}" && colorStack.length){ flush(); color=colorStack.pop(); i+=2; continue; }
+    const m=/^\{\{#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})\|/.exec(text.slice(i));
+    if(m){ flush(); colorStack.push(color);
+      color=(m[1].length===6?"FF"+m[1]:m[1]).toUpperCase(); i+=m[0].length; continue; }
+    cur+=text[i]; i++;
+  }
+  flush();
+  return spans;
+}
+
+/* ---------------- api ---------------- */
+async function fetchJSON(url, opts){
+  opts = opts || {};
+  opts.headers = Object.assign({}, opts.headers, authHeaders());
+  let res;
+  try{
+    res = await fetch(api(url), opts);
+  }catch(e){
+    // 存取碼含非半形字元會讓 header 建構直接拋 TypeError（不是 403），
+    // 不自愈的話會無閘門永久鎖死
+    if(TOKEN && /[^\x00-\xFF]/.test(TOKEN)){
+      localStorage.removeItem("todo_token"); TOKEN = "";
+      showGate("存取碼含無效字元，請重新輸入");
+      const err = new Error("存取碼無效"); err.status = 403; throw err;
+    }
+    throw e;
+  }
+  let body = null;
+  try{ body = await res.json(); }catch(e){ /* 非 JSON */ }
+  if(!res.ok){
+    if(res.status === 403) showGate((body && body.error) || "");
+    const err = new Error((body && body.error) || ("HTTP "+res.status));
+    err.status = res.status; throw err;
+  }
+  return body;
+}
+/* ---------------- access gate ---------------- */
+function showGate(msg){
+  $("gateErr").textContent = TOKEN ? (msg || "存取碼錯誤，請重新輸入") : "";
+  $("gate").classList.add("show");
+  setTimeout(()=>$("gateInput").focus(), 100);
+}
+$("gateBtn").onclick = async ()=>{
+  const v = $("gateInput").value.trim();
+  if(!v) return;
+  if(!/^[\x21-\x7E]+$/.test(v)){
+    $("gateErr").textContent = "存取碼只能是半形英數字元";
+    return;
+  }
+  TOKEN = v;
+  localStorage.setItem("todo_token", v);
+  $("gate").classList.remove("show");
+  $("gateInput").value = "";
+  // token 過期中途換碼：先用新碼重試未存的編輯，別讓 boot 蓋掉
+  if(state.dirty && state.date){
+    await saveNow();
+    if(state.dirty) return; // 還是失敗（閘門會再彈），保住編輯
+    try{ await loadState(); renderTabs(); }catch(e){}
+    return;
+  }
+  boot();
+};
+$("gateInput").addEventListener("keydown", e=>{
+  if(e.key === "Enter") $("gateBtn").onclick();
+});
+async function loadState(){
+  const s = await fetchJSON("/api/state");
+  state.days = s.days; state.today = s.today;
+}
+async function loadDay(date){
+  const d = await fetchJSON("/api/day/"+date);
+  state.date = date; state.lines = d.lines; state.etag = d.etag;
+  state.dirty = false;
+  renderTabs(); renderList(); renderSave();
+}
+
+/* ---------------- save ---------------- */
+function markDirty(){
+  state.dirty = true; state.gen++; renderSave();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveNow, 1200);
+}
+function saveNow(){
+  if(!state.dirty || state.saving) return state.savePromise;
+  clearTimeout(saveTimer);
+  state.saving = true; renderSave();
+  const gen = state.gen;
+  const date = state.date;
+  const body = JSON.stringify({baseEtag: state.etag, lines: state.lines});
+  state.savePromise = (async ()=>{
+    try{
+      const r = await fetchJSON("/api/day/"+date, {
+        method:"POST", headers:{"Content-Type":"application/json"}, body});
+      state.saving = false;
+      if(state.date !== date) return; // 已切到別天：內容已落地，不動 state
+      state.etag = r.etag; // 先更新 etag，否則下一輪存檔會假 409
+      if(gen !== state.gen){
+        // 存檔飛行中又有編輯：這些編輯的 timer 已被消耗，立刻補存
+        saveTimer = setTimeout(saveNow, 0);
+        renderSave();
+        return;
+      }
+      state.dirty = false; renderSave();
+      // 靜默重讀，取得伺服器端最新的列對應（orig/group）。
+      // 編輯抽屜開著時跳過：換掉 state.lines 會讓 edCtx.line 參照失效
+      try{
+        const d = await fetchJSON("/api/day/"+date);
+        if(state.date === date && !state.dirty && gen === state.gen &&
+           !edCtx && d.etag === state.etag){
+          state.lines = d.lines; renderList();
+        }
+      }catch(e){ /* 重讀失敗無妨，下次操作會再同步 */ }
+    }catch(e){
+      state.saving = false;
+      if(state.date !== date) return;
+      if(e.status === 409){
+        if(edCtx) closeEditor();
+        toast("⚠ 檔案已被其他裝置修改，重新載入最新內容");
+        await loadDay(date);
+      }else{
+        renderSave(true);
+        toast("儲存失敗：" + e.message);
+      }
+    }
+  })();
+  return state.savePromise;
+}
+// 離頁/切走 app 時立即送出未存內容（iOS 全螢幕模式沒有 beforeunload）
+function flushSave(){
+  if(!state.dirty || state.saving || !state.date) return;
+  clearTimeout(saveTimer);
+  try{
+    fetch(api("/api/day/"+state.date), {
+      method:"POST",
+      headers: Object.assign({"Content-Type":"application/json"}, authHeaders()),
+      body: JSON.stringify({baseEtag: state.etag, lines: state.lines}),
+      keepalive: true});
+  }catch(e){ /* 最後手段，失敗無從補救 */ }
+}
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState === "hidden"){ flushSave(); return; }
+  // 回前景：有未存的立刻存（flush 成功時會吃 409 → 重載成相同內容）；
+  // 乾淨狀態則靜默同步 etag。編輯抽屜或全文編輯開著時不可重載——
+  // 全文模式重載會刷新 etag，讓舊快照以新 etag 存檔繞過樂觀鎖
+  if(state.dirty && !state.saving) saveNow();
+  else if(!state.saving && !edCtx &&
+          !$("fulltext").classList.contains("show") && state.date)
+    loadDay(state.date).catch(()=>{});
+});
+window.addEventListener("pagehide", flushSave);
+function renderSave(errored){
+  const bar = $("savebar");
+  bar.classList.remove("hide","ok","err");
+  if(errored){ bar.textContent="⚠ 儲存失敗，點我重試"; bar.classList.add("err"); return; }
+  if(state.saving){ bar.textContent="儲存中…"; return; }
+  if(state.dirty){ bar.textContent="● 未儲存"; return; }
+  bar.textContent="✓ 已儲存"; bar.classList.add("ok");
+  clearTimeout(bar._h); bar._h=setTimeout(()=>bar.classList.add("hide"), 1600);
+}
+$("savebar").onclick = ()=>{ state.dirty = true; saveNow(); };
+window.addEventListener("beforeunload", e=>{
+  if(state.dirty){ e.preventDefault(); e.returnValue=""; }
+});
+// 換頁/換日前把未存的編輯真正落地；失敗就別走，保住編輯
+async function flushBeforeLeave(){
+  while(state.saving && state.savePromise) await state.savePromise;
+  if(state.dirty) await saveNow();
+  while(state.saving && state.savePromise) await state.savePromise;
+  if(state.dirty){ toast("尚未儲存成功，暫不切換"); return false; }
+  return true;
+}
+
+/* ---------------- render ---------------- */
+function renderTabs(){
+  const el = $("tabs"); el.innerHTML="";
+  for(const d of state.days){
+    const b = document.createElement("button");
+    b.className = "tab" + (d===state.date ? " active":"");
+    const f = fmtTab(d);
+    b.innerHTML = (d===state.today ? "今天 " : "") + f.label +
+      '<span class="wd">' + f.wd + "</span>";
+    b.onclick = async ()=>{
+      if(d===state.date) return;
+      if(!(await flushBeforeLeave())) return;
+      try{ await loadDay(d); }catch(e){ toast("載入失敗："+e.message); }
+    };
+    el.appendChild(b);
+  }
+}
+function renderSpans(container, spans, lineDone){
+  for(const s of spans){
+    const sp = document.createElement("span");
+    sp.textContent = s.t;
+    if(s.color && !lineDone){
+      sp.style.color = DISPLAY_COLOR[s.color] || ("#"+s.color.slice(2));
+    }
+    if(s.strike && !lineDone) sp.style.textDecoration="line-through";
+    if(s.bold) sp.style.fontWeight="700";
+    container.appendChild(sp);
+  }
+}
+function renderList(){
+  const el = $("list"); el.innerHTML="";
+  if(!state.lines.length){
+    el.innerHTML = '<div class="empty">這一天還沒有內容</div>';
+  }
+  state.lines.forEach((l, idx)=>{
+    if(l.level===null || l.level===undefined){
+      const d = document.createElement("div"); d.className="spacer";
+      el.appendChild(d); return;
+    }
+    if(l.level===0){
+      const c = document.createElement("div"); c.className="cat";
+      c.innerHTML = '<div class="bar"></div>';
+      const t = document.createElement("div"); t.className="cat-text";
+      renderSpans(t, l.spans, false);
+      t.onclick = ()=>openEditor(idx);
+      c.appendChild(t);
+      el.appendChild(c);
+      return;
+    }
+    const done = isDone(l);
+    const item = document.createElement("div");
+    item.className = "item" + (done?" done":"") +
+      (l.level>=2 ? " sub"+Math.min(l.level-1,3) : "");
+    const chk = document.createElement("button"); chk.className="chk";
+    chk.setAttribute("aria-label","完成");
+    chk.onclick = ()=>toggleDone(idx);
+    const txt = document.createElement("div"); txt.className="txt";
+    renderSpans(txt, l.spans, done);
+    txt.onclick = ()=>openEditor(idx);
+    const dot = document.createElement("button");
+    dot.className = "dot " + colorState(l);
+    dot.setAttribute("aria-label","顏色");
+    dot.onclick = ()=>cycleColor(idx);
+    item.appendChild(chk); item.appendChild(txt); item.appendChild(dot);
+    el.appendChild(item);
+  });
+  const add = document.createElement("button");
+  add.className="addline"; add.textContent="＋ 新增事項";
+  add.onclick = ()=>openEditor(-1);
+  el.appendChild(add);
+}
+
+/* ---------------- mutations ---------------- */
+function toggleDone(idx){
+  const l = state.lines[idx];
+  if(!isDone(l)) l.spans.forEach(s=>s.strike=true);
+  else l.spans.forEach(s=>delete s.strike);
+  l.mod = true; markDirty(); renderList();
+}
+function cycleColor(idx){
+  const l = state.lines[idx];
+  const st = colorState(l);
+  if(st==="none" || st==="mixed"){
+    if(st==="mixed") l._stash = JSON.parse(JSON.stringify(l.spans));
+    l.spans.forEach(s=>s.color="FFFF0000");
+  }else if(st==="red"){
+    l.spans.forEach(s=>s.color="FF00B050");
+  }else{ // green -> 還原 or 無色
+    if(l._stash){
+      l.spans.forEach((s,i)=>{
+        const old = l._stash[i];
+        if(old && old.t===s.t && old.color) s.color = old.color;
+        else delete s.color;
+      });
+      delete l._stash;
+    }else l.spans.forEach(s=>delete s.color);
+  }
+  l.mod = true; markDirty(); renderList();
+}
+
+/* ---------------- editor sheet ---------------- */
+let edCtx = null; // {mode:'edit', line, level} | {mode:'new', idx, level}
+function openEditor(idx, presetLevel){
+  if(idx>=0){
+    const l = state.lines[idx];
+    // 存物件參照而非索引：背景 409 重載後 indexOf 會失效而非指錯列
+    edCtx = {mode:"edit", line:l, level:l.level};
+    $("edText").value = spansToMarkup(l.spans);
+    $("edTitle").textContent = "編輯" + (l.level===0?"分類":"事項");
+    $("edDel").style.display = "";
+  }else{
+    const lvl = presetLevel!==undefined ? presetLevel : 1;
+    edCtx = {mode:"new", idx: state.lines.length, level:lvl};
+    $("edText").value = "";
+    $("edTitle").textContent = "新增";
+    $("edDel").style.display = "none";
+  }
+  updateLvlName();
+  $("mask").classList.add("show"); $("editor").classList.add("show");
+  setTimeout(()=>$("edText").focus(), 250);
+}
+function closeEditor(){
+  $("mask").classList.remove("show"); $("editor").classList.remove("show");
+  edCtx = null;
+}
+function updateLvlName(){
+  $("lvlName").textContent = LEVEL_NAMES[edCtx.level] || ("層"+edCtx.level);
+}
+$("lvlDown").onclick = ()=>{ if(edCtx.level>0){ edCtx.level--; updateLvlName(); } };
+$("lvlUp").onclick = ()=>{ if(edCtx.level<5){ edCtx.level++; updateLvlName(); } };
+function wrapSelection(tok){
+  const ta = $("edText");
+  const a = ta.selectionStart, b = ta.selectionEnd, v = ta.value;
+  if(a===b){ ta.setRangeText(tok+tok, a, b, "end"); ta.selectionStart=ta.selectionEnd=a+tok.length; }
+  else ta.setRangeText(tok + v.slice(a,b) + tok, a, b, "select");
+  ta.focus();
+}
+document.querySelectorAll(".tok[data-tok]").forEach(b=>{
+  b.onclick = ()=>wrapSelection(b.dataset.tok);
+});
+$("tokArrow").onclick = ()=>{
+  const ta = $("edText");
+  const pos = ta.value.length;
+  ta.setRangeText("++=>++", pos, pos, "end");
+  ta.selectionStart = ta.selectionEnd = pos+4; // 游標放在 => 後、++ 前
+  ta.focus();
+};
+function commitEditor(){
+  // 回傳 {ok, next}：next = 「存＋下一」該插入的位置；失敗回 {ok:false}
+  const raw = $("edText").value;
+  const text = raw.trim();
+  if(edCtx.mode==="edit"){
+    const l = edCtx.line;
+    const i = state.lines.indexOf(l);
+    if(i === -1){
+      toast("此列已被其他裝置更新，請重新選取編輯");
+      return {ok:false};
+    }
+    if(!text){ // 清空 = 刪除
+      state.lines.splice(i,1);
+      markDirty(); renderList();
+      return {ok:true, next:i};
+    }
+    let changed = false;
+    if(raw !== spansToMarkup(l.spans)){
+      l.spans = markupToSpans(raw); l.mod = true; changed = true;
+    }
+    if(l.level !== edCtx.level){
+      l.level = edCtx.level; l.group = "n"+(++state.newSeq);
+      l.mod = true; changed = true;
+    }
+    if(changed){ markDirty(); renderList(); }
+    return {ok:true, next:i+1};
+  }
+  if(!text) return {ok:false};
+  const at = Math.min(edCtx.idx, state.lines.length);
+  state.lines.splice(at, 0, {
+    level: edCtx.level, spans: markupToSpans(raw),
+    group: "n"+(++state.newSeq), orig: null, ht: null, mod: true});
+  markDirty(); renderList();
+  return {ok:true, next:at+1};
+}
+$("edSave").onclick = ()=>{ if(commitEditor().ok || !$("edText").value.trim()) closeEditor(); };
+$("edCancel").onclick = closeEditor;
+$("edDel").onclick = ()=>{
+  if(edCtx.mode==="edit"){
+    const i = state.lines.indexOf(edCtx.line);
+    if(i !== -1){ state.lines.splice(i,1); markDirty(); renderList(); }
+  }
+  closeEditor();
+};
+$("edNext").onclick = ()=>{
+  const lvl = edCtx.level;
+  const r = commitEditor();
+  if(!r.ok) return;
+  edCtx = {mode:"new", idx: r.next, level: lvl};
+  $("edText").value=""; $("edTitle").textContent="新增"; $("edDel").style.display="none";
+  updateLvlName(); $("edText").focus();
+};
+$("mask").onclick = closeEditor;
+
+/* ---------------- full text mode ---------------- */
+function lineToText(l){
+  if(l.level===null || l.level===undefined) return "";
+  let mk = spansToMarkup(l.spans);
+  if(l.level===0) return "# " + mk;
+  if(mk.startsWith("# ")) mk = "\\" + mk;
+  return "  ".repeat(l.level-1) + mk.replace(/\n/g, "↵");
+}
+function openFullText(){
+  $("ftTitle").textContent = "全文編輯 " + state.date.slice(4,6)+"/"+state.date.slice(6,8);
+  $("ftText").value = state.lines.map(lineToText).join("\n");
+  $("fulltext").classList.add("show");
+}
+function parseFullText(text){
+  const oldLines = state.lines.slice();
+  const used = new Array(oldLines.length).fill(false);
+  const out = [];
+  for(const raw of text.split("\n")){
+    if(!raw.trim()){
+      // 空白列：優先沿用原本的空白列（保留樣式列）
+      let hit = -1;
+      for(let i=0;i<oldLines.length;i++){
+        if(!used[i] && (oldLines[i].level===null||oldLines[i].level===undefined)){ hit=i; break; }
+      }
+      if(hit>=0){ used[hit]=true; out.push(oldLines[hit]); }
+      else out.push({level:null, spans:[], group:"n"+(++state.newSeq), orig:null, ht:null, mod:true});
+      continue;
+    }
+    let level, body;
+    if(/^#\s/.test(raw)){ level=0; body=raw.replace(/^#\s+/,""); }
+    else{
+      const ind = /^[\t ]*/.exec(raw)[0];
+      let n=0; for(const ch of ind) n += (ch==="\t"?2:1);
+      level = 1 + Math.floor(n/2);
+      body = raw.slice(ind.length);
+      if(body.startsWith("\\# ")) body = body.slice(1);
+    }
+    body = body.replace(/↵/g, "\n");
+    // 以「同層級＋同標記文字」比對舊行，沿用列對應（樣式不動）
+    let hit = -1;
+    for(let i=0;i<oldLines.length;i++){
+      const o = oldLines[i];
+      if(!used[i] && o.level===level && spansToMarkup(o.spans)===body){ hit=i; break; }
+    }
+    if(hit>=0){ used[hit]=true; out.push(oldLines[hit]); }
+    else out.push({level, spans:markupToSpans(body),
+      group:"n"+(++state.newSeq), orig:null, ht:null, mod:true});
+  }
+  return out;
+}
+$("btnText").onclick = ()=>{ if(state.date) openFullText(); };
+$("ftCancel").onclick = ()=>$("fulltext").classList.remove("show");
+$("ftSave").onclick = ()=>{
+  state.lines = parseFullText($("ftText").value);
+  $("fulltext").classList.remove("show");
+  markDirty(); renderList();
+};
+
+/* ---------------- share as image ---------------- */
+const IMG_COLOR = {"FFFF0000":"#d92b2b","FF00B050":"#1d8a4a"};
+function buildDayCanvas(){
+  const W = 1080, PAD = 48, HEAD = 150;
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  const FONT = (w,s)=> w+" "+s+'px -apple-system,"PingFang TC","Heiti TC","Microsoft JhengHei",sans-serif';
+
+  // 逐字排版（CJK 為主），回傳行陣列，每行是 [{ch,w,color,strike,bold}]
+  function wrapSpans(spans, maxW, size){
+    const lines = []; let line = [], x = 0;
+    for(const s of spans){
+      ctx.font = FONT(s.bold ? "700" : "400", size);
+      for(const ch of (s.t||"").replace(/\n/g, " ")){
+        const w = ctx.measureText(ch).width;
+        if(x + w > maxW && line.length){ lines.push(line); line = []; x = 0; }
+        line.push({ch, w, color:s.color, strike:s.strike, bold:s.bold});
+        x += w;
+      }
+    }
+    if(line.length) lines.push(line);
+    return lines.length ? lines : [[]];
+  }
+  function drawLine(chs, x0, baseY, size, done){
+    let x = x0;
+    for(const c of chs){
+      ctx.font = FONT(c.bold ? "700" : "400", size);
+      ctx.fillStyle = done ? "#9aa3ad" :
+        (c.color ? (IMG_COLOR[c.color] || "#"+c.color.slice(2)) : "#1c2430");
+      ctx.fillText(c.ch, x, baseY);
+      if(c.strike || done){
+        ctx.fillRect(x, baseY - size*0.32, c.w, Math.max(2, size*0.07));
+      }
+      x += c.w;
+    }
+  }
+
+  function render(drawing){
+    let y = HEAD + 26;
+    for(const l of state.lines){
+      if(l.level === null || l.level === undefined){ y += 12; continue; }
+      if(l.level === 0){
+        y += 24;
+        const lines = wrapSpans(l.spans, W - PAD*2 - 34, 38);
+        if(drawing){
+          ctx.fillStyle = "#1E3A5F";
+          ctx.fillRect(PAD, y + 8, 8, 36);
+        }
+        for(const ln of lines){
+          if(drawing) drawLine(ln, PAD + 32, y + 40, 38, false);
+          y += 52;
+        }
+        y += 4;
+        continue;
+      }
+      const done = isDone(l);
+      const cardX = PAD + (Math.min(l.level,4)-1) * 44;
+      const textX = cardX + 78;
+      const maxW = W - PAD - textX - 24;
+      const lines = wrapSpans(l.spans, maxW, 33);
+      const cardH = lines.length * 48 + 26;
+      if(drawing){
+        ctx.fillStyle = done ? "#f0f2f4" : "#ffffff";
+        ctx.strokeStyle = "#e3e6ea"; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(cardX, y, W - PAD - cardX, cardH, 14);
+        ctx.fill(); ctx.stroke();
+        // 完成圈
+        const cy = y + 37;
+        ctx.beginPath(); ctx.arc(cardX + 40, cy, 17, 0, Math.PI*2);
+        if(done){
+          ctx.fillStyle = "#1d8a4a"; ctx.fill();
+          ctx.strokeStyle = "#fff"; ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(cardX + 31, cy + 1); ctx.lineTo(cardX + 38, cy + 8);
+          ctx.lineTo(cardX + 50, cy - 7); ctx.stroke();
+        }else{
+          ctx.strokeStyle = "#b8c0ca"; ctx.lineWidth = 3; ctx.stroke();
+        }
+      }
+      let ty = y + 46;
+      for(const ln of lines){
+        if(drawing) drawLine(ln, textX, ty, 33, done);
+        ty += 48;
+      }
+      y += cardH + 12;
+    }
+    return y + 30;
+  }
+
+  const H = Math.max(render(false), HEAD + 200);
+  canvas.width = W; canvas.height = H;
+  // 底、頁首
+  ctx.fillStyle = "#f5f6f8"; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#1E3A5F"; ctx.fillRect(0, 0, W, HEAD);
+  const f = fmtTab(state.date);
+  ctx.fillStyle = "rgba(255,255,255,.85)";
+  ctx.font = FONT("600", 30);
+  ctx.fillText("世界島社區管委會・每日追蹤事項", PAD, 58);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = FONT("800", 52);
+  ctx.fillText(state.date.slice(0,4) + "/" + f.label + "（" + f.wd + "）",
+               PAD, 122);
+  render(true);
+  return canvas;
+}
+async function shareDayImage(){
+  if(!state.date) return;
+  // 全程同步產圖（toDataURL），讓 navigator.share 留在點擊手勢內
+  // （iOS Safari 的分享面板只肯在手勢授權未過期時開）
+  let dataUrl, file;
+  try{
+    const canvas = buildDayCanvas();
+    dataUrl = canvas.toDataURL("image/png");
+    const bin = atob(dataUrl.split(",")[1]);
+    const buf = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) buf[i] = bin.charCodeAt(i);
+    file = new File([buf], "每日追蹤_" + state.date + ".png",
+                    {type: "image/png"});
+  }catch(e){ toast("圖片產生失敗：" + e.message); return; }
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{
+      await navigator.share({files:[file], title: "每日追蹤 " + state.date});
+      return;
+    }catch(e){ if(e.name === "AbortError") return; }
+  }
+  $("imgOut").src = dataUrl;
+  $("imgshare").classList.add("show");
+}
+$("btnShare").onclick = shareDayImage;
+$("imgClose").onclick = ()=>$("imgshare").classList.remove("show");
+
+/* ---------------- new day ---------------- */
+$("btnToday").onclick = async ()=>{
+  if(!(await flushBeforeLeave())) return;
+  const today = state.today;
+  if(state.days.includes(today)){
+    if(state.date!==today) await loadDay(today);
+    else toast("已經在今天的分頁");
+    return;
+  }
+  const src = state.days[0];
+  if(!src){ toast("沒有可複製的來源工作表"); return; }
+  const f = fmtTab(src);
+  if(!confirm("以最近一天（"+f.label+"）為底建立今天的追蹤表？\n（已完成／劃掉的項目不會帶入）")) return;
+  try{
+    await fetchJSON("/api/newday", {method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({source: src, target: today})});
+    await loadState(); await loadDay(today);
+    toast("已建立今天的追蹤表");
+  }catch(e){ toast("建立失敗："+e.message); }
+};
+
+/* ---------------- boot ---------------- */
+async function boot(){
+  try{
+    await loadState();
+    if(!state.days.length){
+      $("list").innerHTML = '<div class="empty">xlsx 裡沒有日期工作表</div>';
+      return;
+    }
+    const first = state.days.includes(state.today) ? state.today : state.days[0];
+    await loadDay(first);
+  }catch(e){
+    if(e.status === 403) return; // 閘門已顯示
+    $("list").innerHTML = '<div class="empty">連線失敗：'+e.message+'</div>';
+  }
+}
+boot();
+</script>
+</body>
+</html>
