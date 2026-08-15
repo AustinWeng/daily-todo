@@ -21,9 +21,10 @@ header{position:sticky;top:0;z-index:20;background:var(--navy);color:#fff;
   padding-top:env(safe-area-inset-top)}
 .titlebar{display:flex;align-items:center;gap:8px;padding:10px 12px 6px}
 .titlebar h1{font-size:17px;margin:0;flex:1;font-weight:700;letter-spacing:.5px}
-.titlebar button{background:rgba(255,255,255,.16);color:#fff;border:none;
-  border-radius:8px;padding:7px 11px;font-size:14px;font-weight:600}
-.titlebar button:active{background:rgba(255,255,255,.3)}
+.titlebar button,.titlebar a{background:rgba(255,255,255,.16);color:#fff;border:none;
+  border-radius:8px;padding:7px 11px;font-size:14px;font-weight:600;
+  text-decoration:none;line-height:1.2}
+.titlebar button:active,.titlebar a:active{background:rgba(255,255,255,.3)}
 .tabs{display:flex;gap:6px;overflow-x:auto;padding:6px 12px 10px;
   -webkit-overflow-scrolling:touch;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
@@ -161,6 +162,8 @@ main{padding:10px 10px calc(84px + env(safe-area-inset-bottom));max-width:720px;
 <header>
   <div class="titlebar">
     <h1>每日追蹤事項</h1>
+    <a id="btnSheet" href="https://docs.google.com/spreadsheets/d/1_WuDo9Y0-xTe9hHBZUYuflwelWofyyDd/edit"
+       target="_blank" rel="noopener" aria-label="開啟 Google 試算表">📊</a>
     <button id="btnShare" aria-label="分享圖片">📷</button>
     <button id="btnText">✎ 全文</button>
     <button id="btnToday">＋ 今天</button>
