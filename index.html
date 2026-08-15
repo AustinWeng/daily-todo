@@ -129,6 +129,7 @@ main{padding:10px 10px calc(84px + env(safe-area-inset-bottom));max-width:720px;
   padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .3s;
   max-width:86vw;text-align:center}
 .toast.show{opacity:1}
+.toast:not(.show){pointer-events:none}
 /* 存取碼閘門 */
 .gate{position:fixed;inset:0;z-index:90;background:var(--navy);display:none;
   align-items:center;justify-content:center;padding:20px}
@@ -260,7 +261,9 @@ let saveTimer = null;
 
 /* ---------------- utils ---------------- */
 function toast(msg, ms=2600){
-  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  const t = $("toast");
+  t.onclick = null; // 任何新 toast 都解除前一個（復原鈕）的點擊行為
+  t.textContent = msg; t.classList.add("show");
   clearTimeout(t._h); t._h = setTimeout(()=>t.classList.remove("show"), ms);
 }
 function spansText(spans){ return (spans||[]).map(s=>s.t||"").join(""); }
@@ -395,6 +398,9 @@ async function loadDay(date){
   const d = await fetchJSON("/api/day/"+date);
   state.date = date; state.lines = d.lines; state.etag = d.etag;
   state.dirty = false;
+  // 行陣列整批換掉：舊物件參照全部作廢
+  lastDel = null;
+  swipeOpenLine = null;
   renderTabs(); renderList(); renderSave();
 }
 
@@ -571,14 +577,22 @@ function renderSpans(container, spans, lineDone){
 }
 let swipeOpenLine = null; // 目前滑開動作列的那一行
 function blockEndIndex(catIdx){
-  // 分類行 catIdx 的區塊結尾（下一個分類行或清單尾）
+  // 分類行 catIdx 的區塊結尾（下一個分類行或清單尾），
+  // 並回退掉尾端的空白分隔列，讓新事項貼在本區塊內而非下一個標題上方
+  let end = state.lines.length;
   for(let i=catIdx+1; i<state.lines.length; i++){
-    const lv = state.lines[i].level;
-    if(lv === 0) return i;
+    if(state.lines[i].level === 0){ end = i; break; }
   }
-  return state.lines.length;
+  while(end > catIdx+1 &&
+        (state.lines[end-1].level === null ||
+         state.lines[end-1].level === undefined))
+    end--;
+  return end;
 }
 function renderList(){
+  // 行陣列可能已被靜默重讀換掉，殘留參照要清（否則吞掉下一次點擊）
+  if(swipeOpenLine && !state.lines.includes(swipeOpenLine))
+    swipeOpenLine = null;
   const el = $("list"); el.innerHTML="";
   if(!state.lines.length){
     el.innerHTML = '<div class="empty">這一天還沒有內容</div>';
@@ -707,6 +721,13 @@ function attachSwipe(wrap, item, line){
       }
     }
   });
+  item.addEventListener("touchcancel", ()=>{
+    // 手勢被系統中斷（來電/通知中心）：復原視覺狀態
+    item.style.transition = "";
+    item.style.transform = "";
+    horizontal = null;
+    wrap.classList.remove("swiping");
+  });
 }
 function moveLine(line, dir){
   const i = state.lines.indexOf(line);
@@ -728,16 +749,21 @@ function swipeDelete(line){
   const i = state.lines.indexOf(line);
   if(i < 0) return;
   state.lines.splice(i, 1);
-  lastDel = {line, i};
+  lastDel = {line, i, date: state.date};
   closeSwipe(); markDirty(); renderList();
   const t = $("toast");
   t.textContent = "已刪除 1 項・點此復原";
   t.classList.add("show");
   clearTimeout(t._h);
   t.onclick = ()=>{
-    if(lastDel){
-      state.lines.splice(Math.min(lastDel.i, state.lines.length), 0,
-                         lastDel.line);
+    if(lastDel && lastDel.date === state.date){
+      // 以「新行」身份插回：刪除可能已存檔、原列號可能被重用，
+      // 帶舊 orig/group 且 mod=false 會讓存檔原樣照抄到別行的內容
+      const l = lastDel.line;
+      l.group = "n"+(++state.newSeq);
+      l.orig = null;
+      l.mod = true;
+      state.lines.splice(Math.min(lastDel.i, state.lines.length), 0, l);
       lastDel = null; markDirty(); renderList();
     }
     t.classList.remove("show"); t.onclick = null;
