@@ -99,7 +99,7 @@ main{padding:10px 10px calc(84px + env(safe-area-inset-bottom));max-width:720px;
 .tokrow{display:flex;gap:6px;margin:10px 0;flex-wrap:wrap}
 .tok{border:1px solid var(--line);background:#f2f4f6;border-radius:8px;
   padding:7px 10px;font-size:13px;font-weight:600}
-.tok.red{color:var(--red)} .tok.green{color:var(--green)}
+.tok.red{color:var(--red)} .tok.green{color:var(--green)} .tok.blue{color:#0070c0}
 .tok.strike{text-decoration:line-through}
 .lvlrow{display:flex;align-items:center;gap:10px;margin:6px 0 12px;font-size:14px}
 .lvlrow button{width:38px;height:34px;border:1px solid var(--line);background:#fff;
@@ -184,6 +184,7 @@ main{padding:10px 10px calc(84px + env(safe-area-inset-bottom));max-width:720px;
   <div class="tokrow">
     <button class="tok red" data-cmd="red">紅字</button>
     <button class="tok green" data-cmd="green">綠字</button>
+    <button class="tok blue" data-cmd="blue">藍字</button>
     <button class="tok" data-cmd="black">黑字</button>
     <button class="tok" data-cmd="bold"><b>粗體</b></button>
     <button class="tok strike" data-cmd="strike">刪除線</button>
@@ -201,7 +202,7 @@ main{padding:10px 10px calc(84px + env(safe-area-inset-bottom));max-width:720px;
     <button class="btn-save" id="edSave">儲存</button>
   </div>
   <div class="hint">跟 Excel 一樣：<b>先選取文字</b>，再點上面的顏色／粗體／刪除線。
-  慣例：完成打勾（整行刪除線）、紅字＝重要待辦、綠字＝進度（「=&gt;進度」會在游標處插入綠色箭頭）。</div>
+  慣例：完成打勾（整行刪除線）、紅字＝重要待辦、綠字＝進度、藍字＝新增項目提醒。</div>
 </div>
 
 <div class="fulltext" id="fulltext">
@@ -801,7 +802,8 @@ function toggleDone(idx){
 
 /* ---------------- editor sheet ---------------- */
 /* ---- Excel 式所見即所得編輯：spans ↔ contenteditable HTML ---- */
-const RICH_RED = "#d92b2b", RICH_GREEN = "#1d8a4a", RICH_BLACK = "#1c2430";
+const RICH_RED = "#d92b2b", RICH_GREEN = "#1d8a4a", RICH_BLACK = "#1c2430",
+      RICH_BLUE = "#0070c0";
 function spansToRichHTML(spans){
   return (spans||[]).map(s=>{
     const st = [];
@@ -882,6 +884,7 @@ function applyCmd(cmd){
   else if(cmd==="strike") document.execCommand("strikeThrough");
   else if(cmd==="red") document.execCommand("foreColor", false, RICH_RED);
   else if(cmd==="green") document.execCommand("foreColor", false, RICH_GREEN);
+  else if(cmd==="blue") document.execCommand("foreColor", false, RICH_BLUE);
   else if(cmd==="black") document.execCommand("foreColor", false, RICH_BLACK);
   else if(cmd==="arrow") document.execCommand(
     "insertHTML", false, '<span style="color:'+RICH_GREEN+'">=&gt;</span>');
