@@ -435,15 +435,13 @@ function saveNow(){
         return;
       }
       state.dirty = false; renderSave();
-      // 靜默重讀，取得伺服器端最新的列對應（orig/group）。
-      // 編輯抽屜開著時跳過：換掉 state.lines 會讓 edCtx.line 參照失效
-      try{
-        const d = await fetchJSON("/api/day/"+date);
-        if(state.date === date && !state.dirty && gen === state.gen &&
-           !edCtx && d.etag === state.etag){
-          state.lines = d.lines; renderList();
-        }
-      }catch(e){ /* 重讀失敗無妨，下次操作會再同步 */ }
+      // 伺服器在存檔回應裡直接帶回最新內容（orig/group 對應），
+      // 不用再打一趟重讀。編輯抽屜開著時跳過：換掉 state.lines
+      // 會讓 edCtx.line 參照失效
+      if(r.day && state.date === date && !state.dirty &&
+         gen === state.gen && !edCtx && r.day.etag === state.etag){
+        state.lines = r.day.lines; renderList();
+      }
     }catch(e){
       state.saving = false;
       if(state.date !== date) return;
@@ -1195,13 +1193,21 @@ $("btnToday").onclick = async ()=>{
 /* ---------------- boot ---------------- */
 async function boot(){
   try{
-    await loadState();
+    // 一趟拿 state＋預設日內容（比 state→day 兩趟省一個往返）
+    const b = await fetchJSON("/api/boot");
+    state.days = b.days; state.today = b.today;
     if(!state.days.length){
       $("list").innerHTML = '<div class="empty">xlsx 裡沒有日期工作表</div>';
       return;
     }
-    const first = state.days.includes(state.today) ? state.today : state.days[0];
-    await loadDay(first);
+    if(b.day){
+      state.date = b.day.date; state.lines = b.day.lines;
+      state.etag = b.day.etag; state.dirty = false;
+      lastDel = null; swipeOpenLine = null;
+      renderTabs(); renderList(); renderSave();
+    }else{
+      await loadDay(state.days[0]);
+    }
   }catch(e){
     if(e.status === 403) return; // 閘門已顯示
     $("list").innerHTML = '<div class="empty">連線失敗：'+e.message+'</div>';
